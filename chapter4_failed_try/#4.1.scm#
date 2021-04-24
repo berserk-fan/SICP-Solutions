@@ -1,0 +1,12 @@
+;;Ex 4.1
+(define (list-of-values exps env)
+  (if (no-operands? exps)
+      '()
+      (let* ((first-elem (eval (first-operand exps) env))
+	     (second-elem (list-of-values (rest-operands exps) env)))
+	(cons  first-elem second-elem))))
+;;right to left similar
+
+;;Ex 4.2
+;;a. define will be treated as procedure
+;;

@@ -1,0 +1,17 @@
+(define (lambda-module eval put-evaluator get-op put-op)
+  (define (lambda-parameters exp) (cadr exp))
+  (define (lambda-body exp) (cddr exp))
+  (define (make-lambda parameters body)
+    (cons 'lambda (cons parameters body)))
+  (define make-procedure (get-op 'kernel 'make-procedure))
+  (define (eval-lambda exp env)
+    (make-procedure (lambda-parameters exp)
+		    (lambda-body exp)
+		    env))
+  (define (dispatch arg)
+    (cond ((eq? arg 'make-lambda) make-lambda)
+	  (else "Error. Unknown operation in lambda module.")))
+  (put-op 'lambda 'make-lambda make-lambda)
+  (put-evaluator 'lambda eval-lambda))
+
+lambda-module
