@@ -1,0 +1,589 @@
+ ;; Exercise 2.53.  What would the interpreter print in response to evaluating each of the following expressions?
+
+;; (list 'a 'b 'c)
+
+;; (list (list 'george))
+;; (cdr '((x1 x2) (y1 y2)))
+
+;; (cadr '((x1 x2) (y1 y2)))
+;; (pair? (car '(a short list)))
+;; (memq 'red '((red shoes) (blue socks)))
+
+;; (memq 'red '(red shoes blue socks))аtid
+;; Answer: (a b c), ((george)), ((y1, y2)), (y1, y2), #f, #f
+;;
+
+
+;; Exercise 2.54.  Two lists are said to be equal? if they contain equal elements arranged in the same order. For example,
+
+;; (equal? '(this is a list) '(this is a list))
+
+;; is true, but
+
+;; (equal? '(this is a list) '(this (is a) list))
+
+;; is false. To be more precise, we can define equal? recursively in terms of the basic eq? equality of symbols by saying that a and b are equal? if they are both symbols and the symbols are eq?, or if they are both lists such that (car a) is equal? to (car b) and (cdr a) is equal? to (cdr b). Using this idea, implement equal? as a procedure.36
+
+(define (equal? list1 list2)
+  (cond ((or (number? list1)
+	     (number? list))
+	 (eq? list1 list2))
+	((OR (eq? list1 '())
+	     (eq? list2 '()))
+	 (AND (eq? list1 '())
+	      (eq? list2 '())))
+        ((AND (pair? (car list1))
+	      (pair? (car list2))) (AND (equal? (car list1)
+						(car list2))
+					(equal? (cdr list1)
+						(cdr list2))))
+	(else (AND (eq?
+		    (car list1)
+		    (car list2))
+		   (equal?
+		    (cdr list1)
+		    (cdr list2))))
+	))
+
+;;Exercise 2.56.  Show how to extend the basic differentiator to handle more kinds of expressions. For instance, implement the differentiation rule
+(define (exp? exp)
+  (AND (pair? exp) (eq? (car exp) '**)))
+
+(define (deriv exp var)
+  (cond ((number? exp) 0)
+        ((variable? exp)
+         (if (same-variable? exp var) 1 0))
+        ((sum? exp)
+         (make-sum (deriv (addend exp) var)
+                   (deriv (augend exp) var)))
+        ((product? exp)
+         (make-sum
+           (make-product (multiplier exp)
+                         (deriv (multiplicand exp) var))
+           (make-product (deriv (multiplier exp) var)
+                         (multiplicand exp))))
+        (else
+         (error "unknown expression type -- DERIV" exp))))
+
+
+(define (variable? x) (symbol? x))
+
+(define (same-variable? v1 v2)
+  (and (variable? v1) (variable? v2) (eq? v1 v2)))
+
+(define (make-sum sum1 sum2)
+  (cond ((AND (sum? sum1)
+	      (sum? sum2))
+	 (append sum1 (cdr sum2)))
+	((AND (not (sum? sum1))
+	      (not (sum? sum2)))
+	 (if (and (number? sum1)
+		  (number? sum2))
+	     (+ sum1 sum2)
+	     (list '+ sum1 sum2)))
+	((AND (not (sum? sum1))
+		   (sum? sum2))
+	 (cons '+ (cons sum1 (cdr sum2))))
+	(else (make-sum sum2 sum1))))
+
+(define (=number? exp num)
+  (and (number? exp) (= exp num)))
+
+(define (make-product m1 m2)
+  (cond ((or (=number? m1 0) (=number? m2 0)) 0)
+        ((=number? m1 1) m2)
+        ((=number? m2 1) m1)
+        ((and (number? m1) (number? m2)) (* m1 m2))
+        (else (list '* m1 m2))))
+
+(define (make-product m1 m2) (list '* m1 m2))
+
+(define (sum? x)
+  (and (pair? x) (eq? (car x) '+)))
+(define (addend s) (cadr s))
+
+(define (augend s)
+  (if (eq? (cddr s) '())
+      0
+      (cons '+ (cddr s))))
+
+(define (product? x)
+  (and (pair? x) (eq? (car x) '*)))
+
+(define (multiplier p) (cadr p))
+
+(define (multiplicand p) (caddr p))
+
+(define (make-exp a b) (list '** a b))
+
+(define (base exp) (cadr exp))
+(define (power exp) (caddr exp))
+
+(define (product? x)
+  (and (pair? x) (eq? (car x) '*)))
+
+(define (multiplier p) (cadr p))
+
+(define (multiplicand p) (caddr p))
+
+(define (make-exp a b) (list '** a b))
+
+(define (base exp) (cadr exp))
+(define (power exp) (caddr exp))
+
+;;Exercise 2.59.  Implement the union-set operation for the unordered-list representation of sets.
+(define (element-of-set? x set)
+  (cond ((null? set) false)
+        ((equal? x (car set)) true)
+        (else (element-of-set? x (cdr set)))))
+
+(define (adjoin-set x set)
+  (if (element-of-set? x set)
+      set
+      (cons x set)))
+
+(define (union-set set1 set2)
+  (cond ((eq? set1 '()) set2)
+	((element-of-set? (car set1) set2) (union-set (cdr set1) set2))
+	(else (cons (car set1) (union-set (cdr set1) set2))))),
+
+;;Exercise 2.60.  We specified that a set would be represented as a list with no duplicates. Now suppose we allow duplicates. For instance, the set {1,2,3} could be represented as the list (2 3 2 1 3 2 2). Design procedures element-of-set?, adjoin-set, union-set, and intersection-set that operate on this representation. How does the efficiency of each compare with the corresponding procedure for the non-duplicate representation? Are there applications for which you would use this representation in preference to the non-duplicate one?
+
+(define (intersection-set set1 set2)
+  (cond ((or (null? set1) (null? set2)) '())
+        ((element-of-set? (car set1) set2)        
+         (cons (car set1)
+               (intersection-set (cdr set1) set2)))
+        (else (intersection-set (cdr set1) set2))))
+
+(define (union-dup set1 set2)
+  (append set1 set2))
+
+(define (intersection-dup set1 set2)
+  (intersection-set set1 set2))
+
+;;Exercise 2.63.  Each of the following two procedures converts a binary tree to a list.
+
+;;(define (tree->list-1 tree)
+;; (if (null? tree)
+;;       '()
+;;       (append (tree->list-1 (left-branch tree))
+;;               (cons (entry tree)
+;;                     (tree->list-1 (right-branch tree))))))
+;; (define (tree->list-2 tree)
+;;   (define (copy-to-list tree result-list)
+;;     (if (null? tree)
+;;         result-list
+;;         (copy-to-list (left-branch tree)
+;;                       (cons (entry tree)
+;;                             (copy-to-list (right-branch tree)
+;;                                           result-list)))))
+;;   (copy-to-list tree '()))
+
+;; a. Do the two procedures produce the same result for every tree? If not, how do the results differ? What lists do the two procedures produce for the trees in figure 2.16?
+
+;; b. Do the two procedures have the same order of growth in the number of steps required to convert a balanced tree with n elements to a list? If not, which one grows more slowly?
+
+;; a) - yes they both produce acsending list
+;; for 1 - obvious
+;; for 2 - by induction on size of first parameter with second parameter
+;; having all elements that are sorted and bigger than any element of tree
+
+;; b) - second one is faster it is O(n), first is O(nlogn) by symbolic manipulations or simply using masters theorem
+
+(define (entry tree) (car tree))
+(define (left-branch tree) (cadr tree))
+(define (right-branch tree) (caddr tree))
+(define (make-tree entry left right)
+  (list entry left right))
+
+(define (tree->list-1 tree)
+  (if (null? tree)
+      '()
+      (append (tree->list-1 (left-branch tree))
+              (cons (entry tree)
+                    (tree->list-1 (right-branch tree))))))
+(define (tree->list-2 tree)
+  (define (copy-to-list tree result-list)
+    (if (null? tree)
+        result-list
+        (copy-to-list (left-branch tree)
+                      (cons (entry tree)
+                            (copy-to-list (right-branch tree)
+                                          result-list)))))
+  (copy-to-list tree '()))
+
+(define (make-right-leaning-tree n)
+  (define (helper cur)
+    (if (eq? cur n)
+	'()
+	(make-tree cur '() (helper (+ cur 1)))))
+  (helper 1))
+
+
+;; Exercise 2.64.  The following procedure list->tree converts an ordered list to a balanced binary tree. The helper procedure partial-tree takes as arguments an integer n and list of at least n elements and constructs a balanced tree containing the first n elements of the list. The result returned by partial-tree is a pair (formed with cons) whose car is the constructed tree and whose cdr is the list of elements not included in the tree.
+
+(define (list->tree elements)
+  (car (partial-tree elements (length elements))))
+
+(define (partial-tree elts n)
+  (if (= n 0)
+      (cons '() elts)
+      (let ((left-size (quotient (- n 1) 2)))
+        (let ((left-result (partial-tree elts left-size)))
+          (let ((left-tree (car left-result))
+                (non-left-elts (cdr left-result))
+                (right-size (- n (+ left-size 1))))
+            (let ((this-entry (car non-left-elts))
+                  (right-result (partial-tree (cdr non-left-elts)
+                                              right-size)))
+              (let ((right-tree (car right-result))
+                    (remaining-elts (cdr right-result)))
+                (cons (make-tree this-entry left-tree right-tree)
+                      remaining-elts))))))))
+
+;;a. Write a short paragraph explaining as clearly as you can how partial-tree works. Draw the tree produced by list->tree for the list (1 3 5 7 9 11).
+;;Answer: It is correct by definition and fact that we reduce problem on each step.
+
+;;b. What is the order of growth in the number of steps required by list->tree to convert a list of n elements?;
+;;Answer: O(n). This can be checked in two parts:
+;; 1: runtime doesn't depend on size of elts.
+;; 2: T(m,n) = T(m,n/2) + T(m/2, n/2) where m is size of elts and (1) gives us T(n) = 2T(n/2) which gives up T(n) = O(n).
+
+(define (accumulate-n op init seqs)
+  (if (null? (car seqs))
+      '()
+      (cons (accumulate op init (map car seqs))
+            (accumulate-n op init (map cdr seqs)))))
+
+(define (accumulate op initial sequence)
+  (if (null? sequence)
+      initial
+      (op (car sequence)
+          (accumulate op initial (cdr sequence)))))
+
+(define (enlarge-string-with str n symbol)
+  (define needed-spaces (- n (string-length str)))
+  (cond ((eq? needed-spaces 0) str)
+	((eq? needed-spaces 1) (string-append symbol str))
+	(else (enlarge-string-with (string-append symbol str symbol) n symbol))))
+
+
+(define (enlarge-string str n) (enlarge-string-with str n " "))
+  
+(define (make-image rows)
+  (define lengthMax (accumulate (lambda (row curMax) (max  curMax (string-length row)))
+			  0
+			  rows))
+  (map (lambda(row)(enlarge-string row lengthMax)) rows))
+
+(define (draw-image image)
+  (if (not (eq? image '()))
+      (and (display (car image))
+	   (display "\n")
+	   (draw-image (cdr image)))))
+
+(define (image-width image)
+  (string-length (car image)))
+
+(define (near image1 image2)
+  (accumulate-n (lambda(row1 row2) (string-append row1 row2))
+		""
+		(list image1 image2)))
+
+(define (image-rows image) image)
+
+(define (above up down)
+  (make-image (append (image-rows up) (image-rows down))))
+
+(define (spaces n m)
+  (if (eq? n 0) '() (cons (enlarge-string "" m) (spaces (- n 1) m))))
+
+(define (enlarge-rows rows n)
+  (define rows-left (- n (length rows)))
+  (cond ((eq? rows-left 0) rows)
+	(else (enlarge-rows (append rows (list "")) n))))
+
+(define (image-height image) (length image))
+
+(define (enlarge-image image n m)
+  (define (helper image n)
+    (if(eq? image '())
+       '()
+       (cons (enlarge-string (car image) n) (helper (cdr image) n))))
+  (helper (enlarge-rows image n) m))
+
+(define (tree-image-odd-width tree)
+  (define (connection-header n entry connection-symbol)
+    (enlarge-string
+     (enlarge-string-with (number->string entry)
+			  (+ 2 (quotient n 2))
+			  connection-symbol)
+     n))
+  (define (connect-tree entry image)
+    (above (list (connection-header (image-width image) entry "*"))
+	   image))
+  (if (eq? tree '())
+      (make-image (list "○"))
+      (let*
+	  ((right-tree-image (tree-image-odd-width (right-branch tree)))
+	   (left-tree-image (tree-image-odd-width (left-branch tree)))
+	   (maximum-height (max
+			    (image-height right-tree-image)
+			    (image-height left-tree-image)))
+	   (maximum-width (max
+			   (image-width right-tree-image)
+			   (image-width left-tree-image)))
+	   (right-good (enlarge-image right-tree-image maximum-height maximum-width))
+	   (left-good (enlarge-image left-tree-image maximum-height maximum-width))
+	   (not-connected (near left-good (near (spaces maximum-height 1) right-good))))
+	(connect-tree (entry tree) not-connected))))
+
+(define (draw-tree tree)
+  (draw-image (tree-image-odd-width tree)))
+
+
+
+;;Exercise 2.61.  Give an implementation of adjoin-set using the ordered representation. By analogy with element-of-set? show how to take advantage of the ordering to produce a procedure that requires on the average about half as many steps as with the unordered representation.
+
+(define (insert-to-sorted-list x l)
+  (cond ((eq? l '()) (list x))
+	((< x (car l)) (cons x l))
+        (else (cons (car l) (insert-to-sorted-list x (cdr l))))))
+(define (adjoin-set x set)
+  (if (element-of-set? x set)
+      set
+      (insert-to-sorted-list x set)))
+;; Exercise 2.62.  Give a (n) implementation of union-set for sets represented as ordered lists.
+(define (union-set-for-ordered set1 set2)
+  (cond ((eq? set1 '()) set2)
+	((eq? set2 '()) set1)
+	((< (car set1) (car set2))
+	 (cons (car set1)
+	       (union-set-for-ordered (cdr set1)
+				      set2)))
+	((= (car set1)
+	    (car set2)) (union-set-for-ordered (cdr set1) set2))
+	((> (car set1) (car set2))
+	 (union-set-for-ordered set2 set1))))
+
+
+
+;;Exercise 2.65.  Use the results of exercises 2.63 and  2.64 to give (n) implementations of union-set and intersection-set for sets implemented as (balanced) binary trees.
+
+(define (union-set-binary set1 set2)
+  (list->tree (union-set-for-ordered
+	       (tree->list-2 set1)
+	       (tree->list-2 set2))))
+
+;;
+
+(define (make-leaf symbol weight)
+  (list 'leaf symbol weight))
+(define (leaf? object)
+  (eq? (car object) 'leaf))
+(define (symbol-leaf x) (cadr x))
+(define (weight-leaf x) (caddr x))
+
+(define (make-code-tree left right)
+  (list left
+        right
+        (append (symbols left) (symbols right))
+        (+ (weight left) (weight right))))
+
+(define (left-branch tree) (car tree))
+(define (right-branch tree) (cadr tree))
+(define (symbols tree)
+  (if (leaf? tree)
+      (list (symbol-leaf tree))
+      (caddr tree)))
+(define (weight tree)
+  (if (leaf? tree)
+      (weight-leaf tree)
+      (cadddr tree)))
+
+(define (decode bits tree)
+  (define (decode-1 bits current-branch)
+    (if (null? bits)
+        '()
+        (let ((next-branch
+               (choose-branch (car bits) current-branch)))
+          (if (leaf? next-branch)
+              (cons (symbol-leaf next-branch)
+                    (decode-1 (cdr bits) tree))
+              (decode-1 (cdr bits) next-branch)))))
+  (decode-1 bits tree))
+(define (choose-branch bit branch)
+  (cond ((= bit 0) (left-branch branch))
+        ((= bit 1) (right-branch branch))
+        (else (error "bad bit -- CHOOSE-BRANCH" bit))))
+
+;;Define an encoding tree and a sample message:
+
+(define sample-tree
+  (make-code-tree (make-leaf 'A 4)
+                  (make-code-tree
+                   (make-leaf 'B 2)
+                   (make-code-tree (make-leaf 'D 1)
+                                   (make-leaf 'C 1)))))
+
+(define sample-message '(0 1 1 0 0 1 0 1 0 1 1 1 0))
+
+;;Use the decode procedure to decode the message, and give the result.
+
+;;Answer: ;Value: (a d a b b c a)
+
+;;Exercise 2.68.  The encode procedure takes as arguments a message and a tree and produces the list of bits that gives the encoded message.
+
+(define (encode message tree)
+  (if (eq? '() message)
+      '()
+      (append (encode-symbol (car message) tree)
+              (encode (cdr message) tree))))
+
+;;Encode-symbol is a procedure, which you must write, that returns the list of bits that encodes a given symbol according to a given tree. You should design encode-symbol so that it signals an error if the symbol is not in the tree at all. Test your procedure by encoding the result you obtained in exercise 2.67 with the sample tree and seeing whether it is the same as the original sample message.
+
+(define (contains list x)
+  (define (helper list x)
+    (cond ((eq? list '()) #f)
+	  ((equal? x (car list)) #t)
+	  (else (helper (cdr list) x))))
+  (helper list x))
+
+(define (reverse list)
+  (define (helper left res)
+    (if (eq? left '())
+	res
+	(helper (cdr left) (cons (car left) res))
+	)
+  )
+  (helper list '()))
+
+(define (encode-symbol symbol tree)
+  (define (helper visited cur-path bit-path cur)
+    (cond ((AND (equal? cur tree)
+		(contains visited (left-branch cur))
+		(contains visited (right-branch cur)))
+	   "NOT FOUND")
+	  ((AND (leaf? cur)
+		(eq? (symbol-leaf cur)
+		     symbol))
+	   bit-path)
+	  ((AND (leaf? cur)
+		(not (eq? (symbol-leaf cur)
+			  symbol)))
+	  (helper (cons cur visited)
+		  (cdr cur-path)
+		  (cdr bit-path)
+		  (car cur-path)))
+	  ((AND (not (leaf? cur))
+	       (contains visited (left-branch cur))
+	       (contains visited (right-branch cur)))
+	  (helper (cons cur visited)
+		  (cdr cur-path)
+		  (cdr bit-path)
+		  (car cur-path)))
+	  ((AND (not (leaf? cur))
+		(not (contains visited (left-branch cur)))
+		(contains visited (right-branch cur)))
+	  (helper visited
+		  (cons cur cur-path)
+		  (cons 0 bit-path)
+		  (left-branch cur)))
+	  ((AND (not (leaf? cur))
+		(not (contains visited (right-branch cur)))
+		(contains visited (left-branch cur)))
+	   (helper visited
+		   (cons cur cur-path)
+		   (cons 1 bit-path)
+		   (right-branch cur)))
+	  ((AND (not (leaf? cur))
+		(not (contains visited (left-branch cur)))
+		(not (contains visited (right-branch cur))))
+	   (helper visited
+		   (cons cur cur-path)
+		   (cons 0 bit-path)
+		   (left-branch cur)))
+	  ))
+  (reverse (helper '() '() '() tree)))
+
+;;The following procedure takes as its argument a list of symbol-frequency pairs (where no symbol appears in more than one pair) and generates a Huffman encoding tree according to the Huffman algorithm.
+
+(define (generate-huffman-tree pairs)
+  (successive-merge (make-leaf-set pairs)))
+
+;;Make-leaf-set is the procedure given above that transforms the list of pairs into an ordered set of leaves. Successive-merge is the procedure you must write, using make-code-tree to successively merge the smallest-weight elements of the set until there is only one element left, which is the desired Huffman tree. (This procedure is slightly tricky, but not really complicated. If you find yourself designing a complex procedure, then you are almost certainly doing something wrong. You can take significant advantage of the fact that we are using an ordered set representation.)
+
+(define (adjoin-set-2 x set)
+  (cond ((null? set) (list x))
+        ((< (weight x) (weight (car set))) (cons x set))
+        (else (cons (car set)
+                    (adjoin-set-2 x (cdr set))))))
+
+(define (insert-code-tree tree listOfTrees)
+  (cond ((eq? listOfTrees '()) (list tree))
+	((<= (weight tree) (weight (car listOfTrees))) (cons tree listOfTrees))
+	(else (cons (car listOfTrees)
+		    (insert-code-tree tree (cdr listOfTrees)))))))
+
+(define (successive-merge subtrees)
+  (cond ((eq? (length subtrees) 1) (car subtrees))
+	(else (let* ((lowest (car subtrees))
+		     (nextLowest (cadr subtrees))
+		     (merged (make-code-tree lowest
+					     nextLowest)))
+		(successive-merge (insert-code-tree merged (cddr subtrees)))))))
+
+(define (make-leaf-set pairs)
+  (if (null? pairs)
+      '()
+      (let ((pair (car pairs)))
+        (adjoin-set-2 (make-leaf (car pair)    ; symbol
+                               (cadr pair))  ; frequency
+                    (make-leaf-set (cdr pairs))))))
+
+;;Exercise 2.70.  The following eight-symbol alphabet with associated relative frequencies was designed to efficiently encode the lyrics of 1950s rock songs. (Note that the ``symbols'' of an ``alphabet'' need not be individual letters.)
+;;A	2	NA	16
+;; BOOM	1	SHA	3
+;; GET	2	YIP	9
+;; JOB	2	WAH	1
+;; Use generate-huffman-tree (exercise 2.69) to generate a corresponding Huffman tree, and use encode (exercise 2.68) to encode the following message:
+;; Get a job
+;; Sha na na na na na na na na
+;; Get a job
+;; Sha na na na na na na na na
+;; Wah yip yip yip yip yip yip yip yip yip
+;; Sha boom
+;; How many bits are required for the encoding? What is the smallest number of bits that would be needed to encode this song if we used a fixed-length code for the eight-symbol alphabet?
+(define symbols1 (list '(NA 16) '(YIP 9) '(SHA 3) '(GET 2) '(JOB 2) '(A 2) '(BOOM 1) '(WAH 1)))
+(define tree-for-song (generate-huffman-tree symbols1))
+(define song '(Get a job Sha na na na na na na na na
+		   Get a job Sha na na na na na na na na
+		   Wah yip yip yip yip yip yip yip yip yip
+		   Sha boom))
+(define encoded-song (encode song tree-for-song))
+(define encoded-song-in-bits (length encoded-song))
+(decode encoded-song tree-for-song)
+
+;;so if we use custom alphabet then we get 84 bits
+;;in other case we get
+;;267
+(define single-character-length 3) ;in bits
+(accumulate (lambda(symbol cur)
+	      (+ cur (let* ((symbol-length (string-length (symbol->string symbol)))
+			     (symbol-in-bits (* single-character-length symbol-length)))
+			symbol-in-bits)))
+	    0
+	    song)
+
+;;Exercise 2.71.  Suppose we have a Huffman tree for an alphabet of n symbols, and that the relative frequencies of the symbols are 1, 2, 4, ..., 2^n-1. Sketch the tree for n=5; for n=10. In such a tree (for general n) how many bits are required to encode the most frequent symbol? the least frequent symbol?
+;;Answer
+;;tree is right-leaning-tree
+;;most frequent symbol always has a length of 1 bit
+;;least frequent symbol will have a length of n bits
+
+;;Exercise 2.72.  Consider the encoding procedure that you designed in exercise 2.68. What is the order of growth in the number of steps needed to encode a symbol? Be sure to include the number of steps needed to search the symbol list at each node encountered. To answer this question in general is difficult. Consider the special case where the relative frequencies of the n symbols are as described in exercise 2.71, and give the order of growth (as a function of n) of the number of steps needed to encode the most frequent and least frequent symbols in the alphabet.
+
+;;if we use efficient set implementation then we need max of O(n) steps to search
+;;to search the symbol
+
