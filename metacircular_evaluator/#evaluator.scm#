@@ -339,7 +339,6 @@ x(define (apply-in-underlying-scheme proc args) (apply proc args))
 	(caddr exp)
 	(make-lambda (cdadr exp)   ; formal parameters
 		     (cddr exp)))) ; body
-
   
   (define (eval-definition exp env)
     (define-variable! (definition-variable exp)
@@ -491,4 +490,12 @@ x(define (apply-in-underlying-scheme proc args) (apply proc args))
 ;;
 ;;this transformation breaks the semantics of definitions
 ;;what if next definition refers to first in it's implementation
+;;
+;;4.19 a. so sense is that letrec restricts direct(valueish) referencing of its
+;;components and 4.18 allows us to do it. do want to implement
+;;
+;;b.
+;;in case of let there will be no shadowing for letrec definitions
+;;
+;;
 ;;
