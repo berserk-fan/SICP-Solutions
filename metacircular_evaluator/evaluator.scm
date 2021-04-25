@@ -20,12 +20,13 @@
 	      (helper (cdr left-modules))))))
   (helper modules))
 
+
 ;; commons
 
-(define (last-exp? seq) (null? (cdr seq)))
-(define (first-exp seq) (car seq))
-(define (rest-exps seq) (cdr seq))
 (define (eval-sequence exps env)
+  (define (last-exp? seq) (null? (cdr seq)))
+  (define (first-exp seq) (car seq))
+  (define (rest-exps seq) (cdr seq))
   (cond ((last-exp? exps) (eval (first-exp exps) env))
         (else (eval (first-exp exps) env)
               (eval-sequence (rest-exps exps) env))))
@@ -35,15 +36,10 @@
       (eq? (car exp) tag)
       false))
 
-(define (sequence->exp seq)
-  (cond ((null? seq) seq)
-        ((last-exp? seq) (first-exp seq))
-        (else (make-begin seq))))
 
 (define (identity x) x)
 
 ;;makers
-
 (define (make-if predicate consequent alternative)
   (list 'if predicate consequent alternative))
 
@@ -51,6 +47,9 @@
 
 (define (make-lambda parameters body)
   (cons 'lambda (cons parameters body)))
+
+(define (make-let bindings body) (append (list 'let bindings) body))
+(define (make-assignment var val) (list 'set! var val))
 
 ;;primitives
 
@@ -68,6 +67,8 @@
 	(list '= =)
 	(list '+ +)
 	(list '- -)
+	(list 'map map)
+	(list 'list list)
         ))
 
 (define (apply-primitive-procedure proc args)
@@ -122,10 +123,10 @@
 			(cdr values)))))
 
 (define (add-binding-to-frame! var val frame)
-      (let ((old-cdr (cdr frame))
-	    (old-car (car frame)))
-	(begin (set-car! frame (list var val))
-	       (set-cdr! frame (cons old-car old-cdr)))))
+  (let ((old-cdr (cdr frame))
+	(old-car (car frame)))
+    (begin (set-car! frame (list var val))
+	   (set-cdr! frame (cons old-car old-cdr)))))
 
 (define (extend-environment vars vals base-env)
   (if (= (length vars) (length vals))
@@ -147,7 +148,10 @@
     (if binding binding (error "Unbound variable" key))))
 
 (define (lookup-variable-value var env)
-  (binding-value (find-binding! var env)))
+  (let ((val (binding-value (find-binding! var env))))
+    (if (eq? '*unassigned* val)
+	(error "Unassigned variable" var)
+	val)))
 
 (define (set-variable-value! var val env)
   (bind-value val (find-binding! var env)))
@@ -169,12 +173,8 @@
 
 ;;procedures
 
-(define (make-procedure parameters body env)
-  (list 'procedure parameters body env))
-
 (define (compound-procedure? p)
   (tagged-list? p 'procedure))
-
 (define (procedure-parameters p) (cadr p))
 (define (procedure-body p) (caddr p))
 (define (procedure-environment p) (cadddr p))
@@ -183,14 +183,14 @@
 
 (define (setup-standard-modules)
   (begin
+    (setup-assignment-module)
+    (setup-apply-module)
     (setup-cond-module)
     (setup-begin-module)
     (setup-quotation-module)
     (setup-if-module)
     (setup-let-module)
     (setup-lambda-module)
-    (setup-apply-module)
-    (setup-definition-module)
     (setup-basics-module)))
 
 (define (setup-cond-module) ;;st
@@ -206,6 +206,12 @@
 	(cdr clause)))
   (define (cond->if exp)
     (expand-clauses (cond-clauses exp)))
+
+
+  (define (sequence->exp seq)
+    (cond ((null? seq) seq)
+	  ((last-exp? seq) (first-exp seq))
+	  (else (make-begin seq))))
 
   (define (expand-clauses clauses)
     (if (null? clauses)
@@ -262,10 +268,10 @@
   (define (first-operand ops) (car ops))
   (define (rest-operands ops) (cdr ops))
   (define (list-of-values exps env)
-  (if (no-operands? exps)
-      '()
-      (cons (eval (first-operand exps) env)
-            (list-of-values (rest-operands exps) env))))
+    (if (no-operands? exps)
+	'()
+	(cons (eval (first-operand exps) env)
+	      (list-of-values (rest-operands exps) env))))
 
   (define (apply procedure arguments)
     (cond ((primitive-procedure? procedure)
@@ -320,15 +326,10 @@
 	'false))
   (add-module (make-module if? eval-if)))
 
-(define (setup-definition-module)
-  (define (eval-definition exp env)
-    (define-variable! (definition-variable exp)
-      (eval (definition-value exp) env)
-      env)
-    'ok)
-
+(define (setup-lambda-module)
   (define (definition? exp)
     (tagged-list? exp 'define))
+
   (define (definition-variable exp)
     (if (symbol? (cadr exp))
 	(cadr exp)
@@ -339,18 +340,41 @@
 	(make-lambda (cdadr exp)   ; formal parameters
 		     (cddr exp)))) ; body
 
-  (add-module (make-module definition? eval-definition))
-)
+  
+  (define (eval-definition exp env)
+    (define-variable! (definition-variable exp)
+      (eval (definition-value exp) env)
+      env)
+    'ok)
 
-(define (setup-lambda-module)
+  (add-module (make-module definition? eval-definition))
+  
   (define (lambda? exp) (tagged-list? exp 'lambda))
   (define (lambda-parameters exp) (cadr exp))
   (define (lambda-body exp) (cddr exp))
 
+  (define (make-procedure parameters body env)
+    (define (scan-out-defines body)
+      (receive (defines rest) (partition definition? body)
+	(let* ((bindings (map (lambda (def)
+				(list (definition-variable def) (list 'quote '*unassigned*)))
+			      defines))
+	       (setters (map (lambda (def)
+			       (make-assignment (definition-variable def)
+						(definition-value def)))
+			     defines))
+	       (res (if (null? defines)
+			body
+			(list (make-let bindings (append setters rest))))))
+	  res)))
+    (list 'procedure parameters (scan-out-defines body) env))
+
+  
   (define (eval-lambda exp env)
     (make-procedure (lambda-parameters exp)
 		    (lambda-body exp)
 		    env))
+  
   (add-module (make-module lambda? eval-lambda)))
 
 (define (setup-boolops-module)
@@ -378,7 +402,7 @@
 
   (add-module (make-module or? eval-or))
   (add-module (make-module and? eval-and))
-)
+  )
 
 (define (setup-let-module)
   (define (let? exp)
@@ -395,14 +419,12 @@
 	(cons (cadar bindings) (bindings->exps (cdr bindings)))))
   
   (define (let->combination exp)
-    (let ((bindings (cadr exp))
-	  (body (cddr exp)))
-      (append
-       (list 'call
-	     (make-lambda (bindings->vars bindings) body))
-       (bindings->exps bindings))))
+    (let* ((bindings (cadr exp))
+	   (body (cddr exp)))
+      (append (list 'call	     
+		    (make-lambda (bindings->vars bindings) body))
+	      (bindings->exps bindings))))
 
-  (define (make-let bindings body) (list 'let bindings body))
   (define (eval-let let env) (eval (let->combination let) env))
 
   
@@ -421,9 +443,23 @@
   (define (eval-let* exp env) (eval (let*->nested-lets exp) env))
   (add-module (make-module let*? eval-let*))
   )
-(setup-standard-modules)
+
 (setup-boolops-module)
+(setup-standard-modules)
 (define the-global-environment (setup-environment))
 (define (evalG expr) (eval expr the-global-environment))
 
 'ok
+
+;;4.14 because represantations of procedures are different
+;; Exercise 4.15.  Given a one-argument procedure p and an object a, p is said to ``halt'' on a if evaluating the expression (p a) returns a value (as opposed to terminating with an error message or running forever). Show that it is impossible to write a procedure halts? that correctly determines whether p halts on a for any procedure p and object a. Use the following reasoning: If you had such a procedure halts?, you could implement the following program:
+
+;; (define (run-forever) (run-forever))
+
+;; (define (try p)
+;;   (if (halts? p p)
+;;       (run-forever)
+;;       'halted))
+;;
+;; (try try): if halts then (halts? p p) returns true then (try try) (run-forever)
+;;            if forever then (halts? p p) = false (try try) halts
