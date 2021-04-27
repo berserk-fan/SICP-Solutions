@@ -57,10 +57,13 @@
 ;;thunks
 (define (delay-it exp env)
   (list 'thunk exp env))
+(define (delay-it-memo exp env)
+  (list 'thunk-memo exp env))
 
 (define (force-it obj)
-  (cond ((thunk? obj)
-	  (let ((evaluated (actual-value (thunk-exp obj) (thunk-env obj))))
+  (cond ((thunk? obj) (force-thunk obj))
+	((thunk-memo? obj)
+	  (let ((evaluated (force-thunk obj)))
 	    (set-car! obj 'evaluated-thunk)
 	    (set-car! (cdr obj) evaluated)
 	    (set-cdr! (cdr obj) '())
@@ -68,6 +71,11 @@
 	((evaluated-thunk? obj) (thunk-value obj))
 	(else obj)))
 
+(define (force-thunk thunk)
+ (actual-value (thunk-exp thunk) (thunk-env thunk)))
+
+(define (thunk-memo? obj)
+  (tagged-list? obj 'thunk-memo))
 
 (define (thunk? obj)
   (tagged-list? obj 'thunk))
@@ -98,7 +106,7 @@
 	(list '= =)
 	(list '+ +)
 	(list '- -)
-	(list 'map map)
+	(list '/ /)
 	(list 'list list)
         ))
 
@@ -174,6 +182,7 @@
   (cond ((eq? env the-empty-environment) #f)
 	((assv key (first-frame env)) => identity)
 	(else (find-binding key (enclosing-environment env)))))
+
 (define (find-binding! key env)
   (let ((binding (find-binding key env)))
     (if binding binding (error "Unbound variable" key))))
@@ -298,11 +307,6 @@
   (define (no-operands? ops) (null? ops))
   (define (first-operand ops) (car ops))
   (define (rest-operands ops) (cdr ops))
-  (define (list-of-values exps env)
-    (if (no-operands? exps)
-	'()
-	(cons (eval (first-operand exps) env)
-	      (list-of-values (rest-operands exps) env))))
 
   (define (list-of-arg-values exps env)
   (if (no-operands? exps)
@@ -310,30 +314,52 @@
       (cons (actual-value (first-operand exps) env)
             (list-of-arg-values (rest-operands exps)
                                 env))))
-  (define (list-of-delayed-args exps env)
-    (if (no-operands? exps)
-	'()
-	(cons (delay-it (first-operand exps) env)
-	      (list-of-delayed-args (rest-operands exps)
-				    env))))
 
+  
+  (define (list-of-args parameters exps env)
+    (map (lambda (parameter exp) (parameter-value parameter exp env)) parameters exps))
+  
+  (define (eager? parameter) (symbol? parameter))
+  (define (lazy? parameter) (and (list? parameter) (eq? (cadr parameter) 'lazy)))
+  (define (lazy-memo? parameter) (and (list? parameter) (eq? (cadr parameter) 'lazy-memo)))
+  
+  (define (parameter-name param)
+    (if (eager? param) param (car param)))
+  
+  (define (parameter-value param exp env)
+    (let ((res (cond ((eager? param) (actual-value exp env))
+	  ((lazy? param) (delay-it exp env))
+	  ((lazy-memo? param) (delay-it-memo exp env))
+	  (else (error "Unexpected parameter" param)))))
+      res)
+    )
+
+  (define (extract-names parameters)
+    (map parameter-name parameters))
+  
+  
   (define (apply procedure arguments env)
     (cond ((primitive-procedure? procedure)
 	   (apply-primitive-procedure procedure (list-of-arg-values arguments env)))
 	  ((compound-procedure? procedure)
-	   (eval-sequence
-	    (procedure-body procedure)
-	    (extend-environment
-             (procedure-parameters procedure)
-             (list-of-delayed-args arguments env)
-             (procedure-environment procedure))))
+	   (let* ((parameters (procedure-parameters procedure))
+		  (just-names (extract-names parameters))
+		  (args (list-of-args parameters arguments env)))
+	     (eval-sequence
+	      (procedure-body procedure)
+	      (extend-environment
+	       just-names
+	       args
+	       (procedure-environment procedure)))))
 	  (else
 	   (error
 	    "Unknown procedure type -- APPLY" procedure))))
+
   
   (define (eval-application exp env)
     (apply (actual-value (operator exp) env)
-	   (operands exp) env))
+	   (operands exp)
+	   env))
   
   (add-module (make-module application? eval-application)))
 
@@ -395,7 +421,7 @@
   (define (lambda? exp) (tagged-list? exp 'lambda))
   (define (lambda-parameters exp) (cadr exp))
   (define (lambda-body exp) (cddr exp))
-
+  
   (define (make-procedure parameters body env)
     (define (scan-out-defines body)
       (receive (defines rest) (partition definition? body)
@@ -494,18 +520,12 @@
 
 'ok
 
-(evalG '(begin
-	  (define count 0)
-	  (define (id x) (set! count (call + count 1)) x)))
-
-(evalG '(define w (call id (call id 10))))
-
-
-
 ;;Exercise 4.30.
 ;;a. display will force thunk x
 ;;b. (1, 2), (1, 2), (1, 2), (1, 2)
 ;;c. because a behaves forces everything eventually
 ;;d. if you wan't sideeffects write c code.
 
+(evalG '(define (hello (a lazy) (b lazy-memo)) (if (call = a 1) (begin a a) b)))
+(evalG '(call hello (begin (call display "hello") 1) (call / 1 0)))
 
