@@ -20,11 +20,12 @@
 	      (helper (cdr left-modules))))))
   (helper modules))
 
+
 ;; commons
-(define (first-exp seq) (car seq))
-(define (last-exp? seq) (null? (cdr seq)))
 
 (define (eval-sequence exps env)
+  (define (last-exp? seq) (null? (cdr seq)))
+  (define (first-exp seq) (car seq))
   (define (rest-exps seq) (cdr seq))
   (cond ((last-exp? exps) (eval (first-exp exps) env))
         (else (eval (first-exp exps) env)
@@ -62,16 +63,16 @@
 (define (force-it obj)
   (cond ((thunk? obj) (force-thunk obj))
 	((thunk-memo? obj)
-	 (let ((evaluated (force-thunk obj)))
-	   (set-car! obj 'evaluated-thunk)
-	   (set-car! (cdr obj) evaluated)
-	   (set-cdr! (cdr obj) '())
-	   evaluated))
+	  (let ((evaluated (force-thunk obj)))
+	    (set-car! obj 'evaluated-thunk)
+	    (set-car! (cdr obj) evaluated)
+	    (set-cdr! (cdr obj) '())
+	    evaluated))
 	((evaluated-thunk? obj) (thunk-value obj))
 	(else obj)))
 
 (define (force-thunk thunk)
-  (actual-value (thunk-exp thunk) (thunk-env thunk)))
+ (actual-value (thunk-exp thunk) (thunk-env thunk)))
 
 (define (thunk-memo? obj)
   (tagged-list? obj 'thunk-memo))
@@ -90,6 +91,7 @@
   (cadr obj))
 
 ;;primitives
+
 (define (primitive-procedure? proc)
   (tagged-list? proc 'primitive))
 
@@ -105,7 +107,6 @@
 	(list '+ +)
 	(list '- -)
 	(list '/ /)
-	(list '* *)
 	(list 'list list)
         ))
 
@@ -222,8 +223,8 @@
 
 (define (setup-standard-modules)
   (begin
-    (setup-apply-module)
     (setup-assignment-module)
+    (setup-apply-module)
     (setup-cond-module)
     (setup-begin-module)
     (setup-quotation-module)
@@ -232,7 +233,7 @@
     (setup-lambda-module)
     (setup-basics-module)))
 
-(define (setup-cond-module)
+(define (setup-cond-module) ;;st
   (define (cond? exp) (tagged-list? exp 'cond))
   (define (cond-clauses exp) (cdr exp))
   (define (cond-else-clause? clause)
@@ -300,19 +301,19 @@
   (add-module (make-module quoted? text-of-quotation)))
 
 (define (setup-apply-module)
-  (define (application? exp) (list? exp))
-  (define (operator exp) (car exp))
-  (define (operands exp) (cdr exp))
+  (define (application? exp) (tagged-list? exp 'call))
+  (define (operator exp) (cadr exp))
+  (define (operands exp) (cddr exp))
   (define (no-operands? ops) (null? ops))
   (define (first-operand ops) (car ops))
   (define (rest-operands ops) (cdr ops))
 
   (define (list-of-arg-values exps env)
-    (if (no-operands? exps)
-	'()
-	(cons (actual-value (first-operand exps) env)
-              (list-of-arg-values (rest-operands exps)
-                                  env))))
+  (if (no-operands? exps)
+      '()
+      (cons (actual-value (first-operand exps) env)
+            (list-of-arg-values (rest-operands exps)
+                                env))))
 
   
   (define (list-of-args parameters exps env)
@@ -327,9 +328,9 @@
   
   (define (parameter-value param exp env)
     (let ((res (cond ((eager? param) (actual-value exp env))
-		     ((lazy? param) (delay-it exp env))
-		     ((lazy-memo? param) (delay-it-memo exp env))
-		     (else (error "Unexpected parameter" param)))))
+	  ((lazy? param) (delay-it exp env))
+	  ((lazy-memo? param) (delay-it-memo exp env))
+	  (else (error "Unexpected parameter" param)))))
       res)
     )
 
@@ -339,7 +340,7 @@
   
   (define (apply procedure arguments env)
     (cond ((primitive-procedure? procedure)
-	(apply-primitive-procedure procedure (list-of-arg-values arguments env)))
+	   (apply-primitive-procedure procedure (list-of-arg-values arguments env)))
 	  ((compound-procedure? procedure)
 	   (let* ((parameters (procedure-parameters procedure))
 		  (just-names (extract-names parameters))
@@ -425,7 +426,7 @@
     (define (scan-out-defines body)
       (receive (defines rest) (partition definition? body)
 	(let* ((bindings (map (lambda (def)
-				(list (definition-variable def) '(quote *unassigned*)))
+				(list (definition-variable def) (list 'quote '*unassigned*)))
 			      defines))
 	       (setters (map (lambda (def)
 			       (make-assignment (definition-variable def)
@@ -489,8 +490,9 @@
   (define (let->combination exp)
     (let* ((bindings (cadr exp))
 	   (body (cddr exp)))
-      (cons (make-lambda (bindings->vars bindings) body)
-	    (bindings->exps bindings))))
+      (append (list 'call	     
+		    (make-lambda (bindings->vars bindings) body))
+	      (bindings->exps bindings))))
 
   (define (eval-let let env) (eval (let->combination let) env))
 
@@ -523,99 +525,10 @@
 ;;b. (1, 2), (1, 2), (1, 2), (1, 2)
 ;;c. because a behaves forces everything eventually
 ;;d. if you wan't sideeffects write c code.
-
-;;playground
 (define program
-  '(begin
-     (define (hello (a lazy) (b lazy-memo)) (if (= a 1) (begin a a) b))
-     (hello (begin (display "a") 1) (display "hello\n"))))
+  '(define (hello (a lazy) (b lazy-memo)) (if (call = a 1) (begin a a) b))
+   (call (hello 1 (display "hello"))
+  )
 
-(define program2
-  '(begin
-     (define (cons (x lazy) (y lazy)) (lambda (m) (m x y)))
-     (define (car z)
-       (define (px (x lazy) (y lazy)) x)
-       (z px))
-     (define
-       (define (py (x lazy) (y lazy)) y)
-       (z py))
-     (define test (cons 1 (display "hello")))
-     (display (car test))
-     (display "\n")))
-
-(define program3
-  '(begin
-     (define (cons (x lazy) (y lazy)) (lambda (m) (m x y)))
-     (define (car z)
-       (define (px (x lazy) (y lazy)) x)
-       (z px))
-     (define (cdr z)
-       (define (py (x lazy) (y lazy)) y)
-       (z py))
-     (define (list-ref items n)
-       (if (= n 0)
-	   (car items)
-	   (list-ref (cdr items) (- n 1))))
-     (define (map proc (items lazy))
-       (if (null? items)
-	   '()
-	   (cons (proc (car items))
-		 (map proc (cdr items)))))
-     (define (scale-list (items lazy) factor)
-       (map (lambda (x) (* x factor))
-	    items))
-     (define (add-lists list1 list2)
-       (cond ((null? list1) list2)
-             ((null? list2) list1)
-             (else (cons (+ (car list1) (car list2))
-			 (add-lists (cdr list1) (cdr list2))))))
-     (define ones (cons 1 ones))
-     (define integers (cons 1 (add-lists ones integers)))
-     (display (list-ref integers 17))))
-
-(define program4
-  '(begin
-     (define (cons (x lazy-memo) (y lazy-memo)) (lambda (m) (m x y)))
-     (define (car z)
-       (define (px (x lazy) (y lazy)) x)
-       (z px))
-     (define (cdr z)
-       (define (py (x lazy) (y lazy)) y)
-       (z py))
-     (define (list-ref items n)
-       (if (= n 0)
-	   (car items)
-	   (list-ref (cdr items) (- n 1))))
-     (define (map proc (items lazy-memo))
-       (if (null? items)
-	   '()
-	   (cons (proc (car items))
-		 (map proc (cdr items)))))
-     (define (scale-list (items lazy-memo) factor)
-       (map (lambda (x) (* x factor))
-	    items))
-     (define (add-lists (list1 lazy-memo) (list2 lazy-memo))
-       (cond ((null? list1) list2)
-             ((null? list2) list1)
-             (else (cons (+ (car list1) (car list2))
-			 (add-lists (cdr list1) (cdr list2))))))
-     (define (integral (integrand lazy-memo) initial-value dt)
-       (define int
-	 (cons initial-value
-               (add-lists (scale-list integrand dt)
-			  int)))
-       int)
-     (define (solve f y0 dt)
-       (define y (integral dy y0 dt))
-       (define dy (map f y))
-       y)
-     (display (list-ref (solve (lambda (x) x) 1 0.001) 1000))
-     (display '(1 2 3))))
-
-(evalG program4)
-
-;;4.32
-;;don`t worry about order of definitions
-
-;;4.33
+(evalG program)
 
