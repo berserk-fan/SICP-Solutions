@@ -294,8 +294,17 @@
 (define (setup-quotation-module)
   (define (quoted? exp)
     (tagged-list? exp 'quote))
+
+  (define (make-lazy underlying-list)
+    (if (eq? '() underlying-list)
+	''()
+	(list 'cons (car underlying-list) (make-lazy (cdr underlying-list)))))
   
-  (define (text-of-quotation exp env) (cadr exp))
+  (define (text-of-quotation exp env)
+    (let ((value (cadr exp)))
+      (cond ((null? value) value)
+	    ((list? value) (eval (make-lazy value) env))
+	    (else value))))
 
   (add-module (make-module quoted? text-of-quotation)))
 
@@ -610,7 +619,8 @@
        (define dy (map f y))
        y)
      (display (list-ref (solve (lambda (x) x) 1 0.001) 1000))
-     (display '(1 2 3))))
+     (display "\n")
+     (display (car '(1 2 3)))))
 
 (evalG program4)
 
@@ -618,4 +628,3 @@
 ;;don`t worry about order of definitions
 
 ;;4.33
-
